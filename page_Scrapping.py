@@ -5,14 +5,13 @@ from bs4 import BeautifulSoup
 import requests
 from smartphone_scrapping import Util
 
+
 class Requisicoes:
     def __init__(self):
+        self.multiple_pages_links = dict()
         self.db = self.create_smartphone_db(self.generate_page_links())
-        #
 
         self.util = Util(self.db)
-        print(self.util.getSmartphones())
-        #print(len(self.db))
 
     def get_phonelist_from_single_page(self, page_id: str) -> List[str]:
         html = requests.get(page_id).content
@@ -30,22 +29,23 @@ class Requisicoes:
 
         return smartphone_ids
 
-    def generate_page_links(self) -> List[str]:
-        multiple_pages_links = []
+    def generate_page_links(self) -> dict:
         sequence = ["", "_2", "_3", "_4", "_5"]
 
-        for i in sequence:
-            current_link = "https://www.tudocelular.com/celulares/fichas-tecnicas{}.html?o=1&ma=2500".format(i)
-            multiple_pages_links.append(current_link)
+        # for i in sequence:
+        for i in range(3):
+            if i not in self.multiple_pages_links.keys():
+                current_link = f"https://www.tudocelular.com/celulares/fichas-tecnicas{sequence[i]}.html?o=1&ma=2500"
+                self.multiple_pages_links[i] = current_link
 
-        return multiple_pages_links
+        return self.multiple_pages_links
 
-    def create_smartphone_db(self, link_list: List[str]) -> List[str]:
+    def create_smartphone_db(self, link_list: dict) -> List[str]:
         smartphone_list = []
-        for j in link_list:
+
+        for j in link_list.values():
             nested = self.get_phonelist_from_single_page(j)
             for k in nested:
                 smartphone_list.append(k)
-        return smartphone_list
 
-r = Requisicoes()
+        return smartphone_list

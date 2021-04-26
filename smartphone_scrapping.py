@@ -1,66 +1,81 @@
-import bs4
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
 
 
 class Util:
     def __init__(self, smartphone_links):
         self.smartphone_links = smartphone_links
-        self.smartphones = []
+        self.smartphones = dict()
+
         for link in smartphone_links:
-            html = requests.get(link).content
 
-            soup = BeautifulSoup(html, 'html.parser')
-            self.smartphones.append(Smartphone(self.get_name(soup), self.get_price(soup), self.get_image(soup)))
+            if link not in self.smartphones.keys():
+                html = requests.get(link).content
+                soup = BeautifulSoup(html, 'html.parser')
+                self.smartphones[link] = Smartphone(
+                    *self.get_name_and_image(soup),
+                    *self.get_price_and_store(soup),
+                    *self.get_grades(soup)
+                )
 
-    def get_name(self, soup) -> str:
-        brute_name = soup.find("div", id="fwide_column")
-        possible_names = []
-        raw_name = ""
-        for i in brute_name.contents:
-            if isinstance(i, bs4.element.Tag):
-                possible_names.append(i.text)
+    def get_name_and_image(self, soup) -> [str, str]:
+        raw_image = soup.find("aside", class_="narrow_column").contents[1]
+        if raw_image:
+            name, img = raw_image.attrs["alt"], raw_image.attrs["src"]
+            return name, img
 
-        if "\n" in possible_names[0]:
-            raw_name = possible_names[1]
-        else:
-            raw_name = possible_names[0]
+        return '', ''
 
-        item_list = ("<h2>", "<strong>", "</strong>", "</h2>", "<small>", "</small>")
+    def get_price_and_store(self, soup) -> [str, str]:
+        raw_price = soup.find("a", class_="hoverred")
+        if raw_price:
+            price, store = raw_price.text, raw_price.attrs["href"]
+            return price, store
 
-        for r in item_list:
-            raw_name = raw_name.replace(r, "")
+        return ['', '']
 
-        return raw_name
+    def get_grades(self, soup) -> [str, str, str]:
+        raw_columns = soup.find("div", class_="phone_column").find_all("ul", class_="phone_column_features")
 
-    def get_image(self, soup) -> str:
-        return soup.find("aside", class_="narrow_column").contents[1].attrs["src"]
+        camera_grade = performance_grade = battery_grade = None
 
-    def get_price(self, soup) -> str:
-        price_options = soup.find("div", class_="compras_items").contents[1]
-        price_tag = None
-        for price in price_options:
-            if isinstance(price, bs4.element.Tag):
-                if price.attrs["class"] == ["shop_places"]:
-                    price_tag = price
+        for column in raw_columns:
+            if '/ 10' in column.text:
+                grades = list(filter(lambda x: not x.isalpha(), column.text.split("/ 10")))
+                camera_grade, performance_grade = grades[3], grades[4]
+                continue
 
-        price_link = None
-        for link in price_tag:
-            if isinstance(link, bs4.element.Tag):
-                if link.attrs["class"] == ["price"]:
-                    price_link = link
+            if 'mAh' in column.text:
+                # Calcular, por agora, a nota da bateria como math.min(0, <bateria do celular>/500-, 10)
+                battery_grade = int(''.join(list(filter(lambda x: not x.isalpha(), column.text.split(" ")[0]))))
+                battery_grade = min(round(battery_grade, 2)/500, 10)
+                break
 
-        return price_link.contents[1].text
+        return [camera_grade, performance_grade, battery_grade]
 
     def getSmartphones(self):
-        result = ""
-        for phone in self.smartphones:
-            result += "name:"+phone.name+" price:"+phone.price+" image:"+phone.image+"\n"
+        result = ', '.join(list(map(str, self.smartphones.values())))
         return result
 
 
 class Smartphone:
-    def __init__(self, name, price, image):
+    def __init__(self, name, image, price, store, camera_grade, performance_grade, battery_grade):
         self.name = name
-        self.price = price
         self.image = image
+        self.price = price
+        self.store = store
+        self.camera_grade = camera_grade
+        self.performance_grade = performance_grade
+        self.battery_grade = battery_grade
+
+    def __str__(self):
+        return 'name: {0}, image: {1}, price: {2}, store: {3}, camera_grade: {4}, performance_grade: {5}, ' \
+               'battery_grade: {6}'.format(
+            self.name,
+            self.image,
+            self.price,
+            self.store,
+            self.camera_grade,
+            self.performance_grade,
+            self.battery_grade
+        )
